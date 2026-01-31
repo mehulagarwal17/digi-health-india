@@ -1,6 +1,3 @@
-<div align="center">
-<img width="1200" height="475" alt="Digi-Health India Banner" src="https://via.placeholder.com/1200x475/1e2b58/ffffff?text=Digi-Health+India+AI+Platform" />
-
 # 🏥 Digi-Health India AI Platform
 
 **An AI-powered national healthcare intelligence, patient tracking, and emergency coordination platform**
