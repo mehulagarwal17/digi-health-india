@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type, Chat, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Type, Chat } from "@google/genai";
 import { Patient } from "../types";
 
 export class GeminiService {
@@ -12,9 +12,10 @@ export class GeminiService {
   async analyzeSymptom(symptoms: string[], age: string): Promise<{ diagnosis: string; risk: string }> {
     try {
       const response = await this.ai.models.generateContent({
+        // Using Flash for quick initial screening
         model: 'gemini-3-flash-preview',
         contents: `Analyze these symptoms for a patient aged ${age}: ${symptoms.join(', ')}. 
-        Provide a disease name and risk level (LOW, MEDIUM, HIGH).`,
+        Provide a very brief probable disease name and a risk level (LOW, MEDIUM, HIGH).`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -29,60 +30,67 @@ export class GeminiService {
       });
       return JSON.parse(response.text || '{"diagnosis": "Inconclusive", "risk": "LOW"}');
     } catch (error) {
+      console.error("Gemini Error:", error);
       return { diagnosis: "Analysis Unavailable", risk: "MEDIUM" };
     }
   }
 
-  async analyzeVision(base64Image: string, symptoms: string[]): Promise<string> {
+  async predictOutbreak(districtData: any): Promise<string> {
     try {
       const response = await this.ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: {
-          parts: [
-            { inlineData: { data: base64Image, mimeType: 'image/jpeg' } },
-            { text: `Analyze this clinical image alongside symptoms: ${symptoms.join(', ')}. Provide a 2-sentence visual assessment for a medical officer.` }
-          ]
-        }
+        contents: `Given this healthcare trend data: ${JSON.stringify(districtData)}, 
+        predict if there is a potential disease outbreak. Provide a one-sentence warning if needed.`,
       });
-      return response.text || "Vision analysis failed to process.";
+      return response.text || "No immediate outbreak threats detected.";
     } catch (error) {
-      return "Unable to perform vision analysis.";
-    }
-  }
-
-  async searchMedicalKnowledge(query: string): Promise<{ text: string; sources: any[] }> {
-    try {
-      const response = await this.ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Provide the latest clinical guidelines or news for: ${query}. Focus on 2024-2025 protocols.`,
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
-      });
-      
-      const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-      return {
-        text: response.text || "No information found.",
-        sources: sources
-      };
-    } catch (error) {
-      return { text: "Search service unavailable.", sources: [] };
+      return "Outbreak monitoring system currently processing.";
     }
   }
 
   createClinicalChat(patient: Patient): Chat {
     const context = `
       PATIENT CONTEXT:
-      ID: ${patient.id}, Symptoms: ${patient.symptoms.join(', ')}
-      Vitals: ${patient.vitals.temp}°F, ${patient.vitals.pulse} bpm
+      ID: ${patient.id}
+      Profile: ${patient.age}y ${patient.gender}, Village: ${patient.village}
+      Symptoms: ${patient.symptoms.join(', ')}
+      Vitals: Temp ${patient.vitals.temp}°F, Pulse ${patient.vitals.pulse} bpm, BP ${patient.vitals.bp || 'N/A'}
+      Risk Score: ${patient.riskLevel}
+      Severity: ${patient.severity}
       AI Preliminary Diagnosis: ${patient.aiDiagnosis}
+      
+      CLINICAL HISTORY:
+      ${patient.previousCare ? `
+      Last Facility: ${patient.previousCare.lastFacility} (${patient.previousCare.facilityType})
+      Prior Diagnosis: ${patient.previousCare.priorDiagnosis}
+      Investigations: ${patient.previousCare.investigations.map(i => `${i.test}: ${i.findings}`).join('; ')}
+      ` : 'No prior records available.'}
+      
+      TIMELINE:
+      ${patient.clinicalTimeline.map(e => `${e.date}: ${e.note} (${e.recordedBy})`).join('\n')}
     `;
 
     return this.ai.chats.create({
+      // Using Pro for high-stakes clinical reasoning
       model: 'gemini-3-pro-preview',
       config: {
-        systemInstruction: `You are a professional CDSS AI for Digi-Health India. Provide medical guidance based on context: ${context}.`,
-        temperature: 0.3,
+        systemInstruction: `
+          You are a professional Clinical Decision Support AI for DIGI-HEALTH INDIA.
+          Your role is to assist Government doctors and Medical Officers by analyzing patient context and providing evidence-based suggestions.
+          
+          STRICT CLINICAL PROTOCOL:
+          1. You are NOT a diagnostic AI. Defer all final decisions to the human doctor.
+          2. Maintain a professional, calm, medically literate, and supportive tone.
+          3. Structure responses with bullet points and short reasoning.
+          4. SAFETY: Never prescribe medications, dosages, or give definitive diagnoses.
+          5. Use phrases like "May consider", "Could indicate", "Clinical correlation required".
+          6. Highlight red flags and mention guideline-based criteria.
+          7. Be concise. Do not use excessive medical jargon.
+          
+          CURRENT PATIENT CONTEXT:
+          ${context}
+        `,
+        temperature: 0.3, // Lower temperature for more consistent medical reasoning
       },
     });
   }

@@ -36,6 +36,7 @@ export interface Patient {
   village: string;
   reportingSource: string;
   symptoms: string[];
+  photo?: string;
   vitals: {
     temp: string;
     pulse: string;

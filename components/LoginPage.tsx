@@ -21,7 +21,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     const credentials: Record<string, { u: string; p: string }> = {
       [UserRole.DOCTOR]: { u: 'doctor01', p: 'password123' },
       [UserRole.AMBULANCE_DRIVER]: { u: 'ambu01', p: 'password123' },
-      [UserRole.HOSPITAL_MANAGER]: { u: 'admin01', p: 'password123' }
+      [UserRole.HOSPITAL_MANAGER]: { u: 'admin01', p: 'password123' },
+      [UserRole.ASHA_WORKER]: { u: 'asha01', p: 'password123' }
     };
 
     const target = credentials[role];
@@ -61,16 +62,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       case UserRole.DOCTOR: return 'Doctor / Medical Officer';
       case UserRole.HOSPITAL_MANAGER: return 'Hospital Administrator';
       case UserRole.AMBULANCE_DRIVER: return 'Ambulance Operator';
-      case UserRole.ASHA_WORKER: return 'Field Health Worker';
+      case UserRole.ASHA_WORKER: return 'Field Health Worker (ASHA)';
       case UserRole.DHO: return 'District Health Officer';
       case UserRole.NATIONAL_AUTHORITY: return 'National Authority';
       default: return 'Authorized Personnel';
     }
   };
 
-  // Filter out the requested roles
+  // Filter out roles that should not be visible in the dropdown
   const availableRoles = Object.values(UserRole).filter(
-    r => r !== UserRole.ASHA_WORKER && r !== UserRole.DHO
+    r => r !== UserRole.DHO && r !== UserRole.NATIONAL_AUTHORITY
   );
 
   return (

@@ -1,9 +1,8 @@
 {
-  "name": "Copy of Digi-Health India AI Platform",
+  "name": "Digi-Health India AI Platform",
   "description": "A comprehensive AI-powered national healthcare intelligence, patient tracking, and emergency coordination platform prototype.",
   "requestFramePermissions": [
-    "camera",
-    "microphone",
-    "geolocation"
+    "geolocation",
+    "camera"
   ]
 }

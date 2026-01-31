@@ -32,9 +32,14 @@ import {
   Droplets,
   BatteryCharging,
   Timer,
-  UserMinus
+  UserMinus,
+  Filter,
+  ArrowRight,
+  ChevronRight,
+  Layout
 } from 'lucide-react';
 import { HospitalStats } from '../types';
+import BedHeatmapModal from '../components/BedHeatmapModal';
 
 interface IncomingAmbulance {
   id: string;
@@ -50,6 +55,22 @@ interface UploadedDocument {
   type: string;
   size: string;
   date: string;
+}
+
+interface LocatorPatient {
+  id: string;
+  abhaId: string;
+  intakeId: string;
+  caseId?: string;
+  ageGroup: string;
+  gender: string;
+  status: 'Admitted' | 'Under Observation' | 'Discharged' | 'Transferred';
+  location: 'ER' | 'ICU' | 'General Ward' | 'Discharge Lounge' | 'Diagnostic Wing';
+  arrivalMode: 'Walk-in' | 'Ambulance' | 'Referral';
+  lastUpdated: string;
+  intakeDate: string;
+  admissionReason: string;
+  bedAssigned: boolean;
 }
 
 const HospitalModule: React.FC = () => {
@@ -73,8 +94,66 @@ const HospitalModule: React.FC = () => {
   ]);
 
   const [syncTime, setSyncTime] = useState(new Date().toLocaleTimeString());
-  const [searchQuery, setSearchQuery] = useState('');
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
+  const [isLocatorOpen, setIsLocatorOpen] = useState(false);
+  const [isBedHeatmapOpen, setIsBedHeatmapOpen] = useState(false);
+
+  // --- LOCATOR STATE ---
+  const [locatorSearch, setLocatorSearch] = useState('');
+  const [selectedLocatorPatient, setSelectedLocatorPatient] = useState<LocatorPatient | null>(null);
+  const [locatorFilter, setLocatorFilter] = useState<'All' | 'Walk-in' | 'Ambulance' | 'Referral'>('All');
+
+  const mockLocatorPatients: LocatorPatient[] = [
+    {
+      id: 'DHI-2026-881204',
+      abhaId: '12-3456-7890-1234',
+      intakeId: 'INT-4421',
+      caseId: 'AMB-9912',
+      ageGroup: 'Adult',
+      gender: 'Male',
+      status: 'Admitted',
+      location: 'ICU',
+      arrivalMode: 'Ambulance',
+      lastUpdated: '10 mins ago',
+      intakeDate: '2026-02-12',
+      admissionReason: 'Respiratory Distress',
+      bedAssigned: true
+    },
+    {
+      id: 'DHI-2026-110293',
+      abhaId: '45-9012-3456-7890',
+      intakeId: 'INT-1122',
+      ageGroup: 'Senior',
+      gender: 'Female',
+      status: 'Under Observation',
+      location: 'ER',
+      arrivalMode: 'Walk-in',
+      lastUpdated: '2 hours ago',
+      intakeDate: '2026-02-13',
+      admissionReason: 'General Fatigue / Fever',
+      bedAssigned: false
+    },
+    {
+      id: 'DHI-2026-554210',
+      abhaId: '22-8812-4433-5566',
+      intakeId: 'INT-5501',
+      ageGroup: 'Child',
+      gender: 'Male',
+      status: 'Discharged',
+      location: 'Discharge Lounge',
+      arrivalMode: 'Referral',
+      lastUpdated: '1 hour ago',
+      intakeDate: '2026-02-11',
+      admissionReason: 'Minor Surgery Follow-up',
+      bedAssigned: false
+    }
+  ];
+
+  const filteredLocatorPatients = mockLocatorPatients.filter(p => {
+    const matchesSearch = p.id.includes(locatorSearch) || p.abhaId.includes(locatorSearch) || p.intakeId.includes(locatorSearch);
+    const matchesFilter = locatorFilter === 'All' || p.arrivalMode === locatorFilter;
+    return matchesSearch && matchesFilter;
+  });
 
   // --- INTAKE MODULE STATE ---
   const [nextPatientId, setNextPatientId] = useState(`DHI-2026-${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`);
@@ -187,7 +266,7 @@ const HospitalModule: React.FC = () => {
   // 15 Summary Cards with specific rules
   const summaryCards = [
     // Row 1
-    { label: 'Beds Available', value: stats.availableBeds, sub: `of ${stats.totalBeds}`, icon: <Bed size={18} />, color: getCapacityColor(stats.availableBeds, stats.totalBeds) },
+    { label: 'Beds Available', value: stats.availableBeds, sub: `of ${stats.totalBeds}`, icon: <Bed size={18} />, color: getCapacityColor(stats.availableBeds, stats.totalBeds), onClick: () => setIsBedHeatmapOpen(true) },
     { label: 'ICU Readiness', value: stats.icuAvailable ? 'ACTIVE' : 'LOCKED', sub: 'Critical Unit Status', icon: <Activity size={18} />, color: stats.icuAvailable ? getStatusColor('emerald') : getStatusColor('red') },
     { label: 'Ventilators', value: 8, sub: 'Units Available', icon: <Activity size={18} />, color: getStatusColor('emerald') }, 
     { label: 'Oxygen Stock', value: `${stats.oxygenStock}%`, sub: 'Current Reserve', icon: <Wind size={18} />, color: getStatusColor(stats.oxygenStock < 25 ? 'red' : stats.oxygenStock < 50 ? 'amber' : 'emerald') },
@@ -236,7 +315,6 @@ const HospitalModule: React.FC = () => {
             <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest">Admin ID: AMB-ADMIN-772</p>
             <p className="text-[9px] text-slate-400 font-medium">Synced: {syncTime}</p>
           </div>
-          {/* Logout button removed as it is redundant with global header */}
         </div>
       </header>
 
@@ -247,7 +325,8 @@ const HospitalModule: React.FC = () => {
           {summaryCards.map((item, idx) => (
             <div 
               key={idx} 
-              className={`p-4 rounded-2xl border-2 shadow-sm flex flex-col justify-between h-32 transition-all hover:scale-[1.03] hover:shadow-md cursor-default ${item.color}`}
+              onClick={item.onClick}
+              className={`p-4 rounded-2xl border-2 shadow-sm flex flex-col justify-between h-32 transition-all hover:scale-[1.03] hover:shadow-md ${item.onClick ? 'cursor-pointer active:scale-95' : 'cursor-default'} ${item.color}`}
             >
               <div className="flex justify-between items-start">
                 <span className="text-[9px] font-black uppercase tracking-widest opacity-80 leading-none">{item.label}</span>
@@ -384,7 +463,10 @@ const HospitalModule: React.FC = () => {
                 </button>
 
                 {/* LOCATOR TRIGGER CARD */}
-                <div className="bg-white rounded-[32px] p-8 border border-slate-200 shadow-sm flex flex-col items-center justify-center gap-3 hover:border-[#0d47a1] transition-all group cursor-pointer">
+                <button 
+                  onClick={() => setIsLocatorOpen(true)}
+                  className="bg-white rounded-[32px] p-8 border border-slate-200 shadow-sm flex flex-col items-center justify-center gap-3 hover:border-[#0d47a1] transition-all group cursor-pointer active:scale-95"
+                >
                    <div className="bg-slate-100 p-4 rounded-full text-slate-500 group-hover:bg-[#0d47a1] group-hover:text-white transition-all">
                     <Search size={32} />
                   </div>
@@ -392,7 +474,7 @@ const HospitalModule: React.FC = () => {
                     <p className="text-sm font-black text-slate-800 uppercase tracking-tight">Patient Locator</p>
                     <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest">ID Search Active</p>
                   </div>
-                </div>
+                </button>
               </div>
             </section>
 
@@ -445,6 +527,224 @@ const HospitalModule: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* --- BED HEATMAP VISUAL MODAL --- */}
+      <BedHeatmapModal isOpen={isBedHeatmapOpen} onClose={() => setIsBedHeatmapOpen(false)} />
+
+      {/* --- PATIENT LOCATOR MODAL --- */}
+      {isLocatorOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-6xl rounded-[40px] shadow-2xl flex flex-row h-[85vh] overflow-hidden border-4 border-white">
+            
+            {/* Left Section: Search and List */}
+            <div className={`flex-1 flex flex-col border-r border-slate-100 transition-all ${selectedLocatorPatient ? 'max-w-[65%]' : 'max-w-full'}`}>
+              <div className="p-8 border-b border-slate-50 bg-slate-50/50 flex flex-col gap-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3 uppercase tracking-tight">
+                      <Search size={28} className="text-[#0d47a1]" /> Patient Locator
+                    </h3>
+                    <p className="text-[12px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                      Administrative Search and Admission Tracking
+                    </p>
+                  </div>
+                  {!selectedLocatorPatient && (
+                    <button onClick={() => setIsLocatorOpen(false)} className="p-3 hover:bg-white rounded-full transition-all text-slate-400 hover:text-red-500 shadow-sm">
+                      <X size={24} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                      type="text" 
+                      placeholder="Search Patient ID, ABHA, Intake ID..."
+                      className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold focus:ring-2 focus:ring-[#0d47a1]/20 outline-none transition-all shadow-inner"
+                      value={locatorSearch}
+                      onChange={e => setLocatorSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex bg-white rounded-2xl border border-slate-200 p-1.5 shadow-sm">
+                    {['All', 'Walk-in', 'Ambulance', 'Referral'].map(f => (
+                      <button 
+                        key={f}
+                        onClick={() => setLocatorFilter(f as any)}
+                        className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${locatorFilter === f ? 'bg-[#1e2b58] text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto">
+                <table className="w-full text-left">
+                  <thead className="sticky top-0 bg-white z-10">
+                    <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">
+                      <th className="px-8 py-4">Identification</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4">Location</th>
+                      <th className="px-6 py-4">Mode</th>
+                      <th className="px-8 py-4 text-right">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {filteredLocatorPatients.map(p => (
+                      <tr 
+                        key={p.id} 
+                        onClick={() => setSelectedLocatorPatient(p)}
+                        className={`group cursor-pointer transition-all hover:bg-blue-50/50 ${selectedLocatorPatient?.id === p.id ? 'bg-blue-50' : ''}`}
+                      >
+                        <td className="px-8 py-5">
+                          <div>
+                            <p className="text-sm font-black text-slate-800">{p.id}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Intake ID: {p.intakeId}</p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-tighter shadow-sm border ${
+                            p.status === 'Admitted' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                            p.status === 'Under Observation' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                            p.status === 'Discharged' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {p.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5">
+                          <p className="text-xs font-black text-slate-700">{p.location}</p>
+                        </td>
+                        <td className="px-6 py-5">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">{p.arrivalMode}</p>
+                        </td>
+                        <td className="px-8 py-5 text-right">
+                          <p className="text-[10px] font-bold text-slate-400">{p.lastUpdated}</p>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredLocatorPatients.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-20 text-center">
+                          <div className="flex flex-col items-center gap-4 opacity-30">
+                            <Search size={48} />
+                            <p className="text-sm font-black uppercase tracking-widest">No matching patients found</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Right Section: Quick View Panel */}
+            {selectedLocatorPatient && (
+              <div className="w-[35%] bg-slate-50 flex flex-col animate-in slide-in-from-right-full duration-500 shadow-[-10px_0_30px_rgba(0,0,0,0.05)] border-l border-white/50">
+                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm shrink-0">
+                  <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                    <Layout size={20} className="text-[#0d47a1]" /> Quick View
+                  </h4>
+                  <button onClick={() => setSelectedLocatorPatient(null)} className="p-2 hover:bg-slate-100 rounded-full transition-all text-slate-400">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                  {/* Identity Header */}
+                  <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 space-y-4">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-[#1e2b58] p-4 rounded-2xl text-white shadow-lg">
+                        <Fingerprint size={24} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-[#0d47a1] uppercase tracking-widest">Patient System ID</p>
+                        <p className="text-xl font-black text-slate-800 tracking-tighter">{selectedLocatorPatient.id}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Age Group</p>
+                        <p className="text-xs font-black text-slate-700 uppercase">{selectedLocatorPatient.ageGroup}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Gender</p>
+                        <p className="text-xs font-black text-slate-700 uppercase">{selectedLocatorPatient.gender}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Admission Info */}
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Intake Details</p>
+                    <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 space-y-5">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase">Intake Date</p>
+                          <p className="text-xs font-black text-slate-700">{selectedLocatorPatient.intakeDate}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[9px] font-black text-slate-400 uppercase">Arrival Mode</p>
+                          <p className="text-xs font-black text-slate-700">{selectedLocatorPatient.arrivalMode}</p>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Admission Reason</p>
+                        <p className="text-xs font-black text-slate-700 leading-relaxed italic mt-1">
+                          "{selectedLocatorPatient.admissionReason}"
+                        </p>
+                      </div>
+                      <div className="flex justify-between items-center pt-4 border-t border-slate-50">
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase">Bed Assigned</p>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {selectedLocatorPatient.bedAssigned ? (
+                              <><CheckCircle2 size={14} className="text-emerald-500" /> <span className="text-xs font-black text-emerald-600">YES</span></>
+                            ) : (
+                              <><XCircle size={14} className="text-red-400" /> <span className="text-xs font-black text-red-500">NO</span></>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[9px] font-black text-slate-400 uppercase">Current Unit</p>
+                          <p className="text-xs font-black text-[#0d47a1] uppercase">{selectedLocatorPatient.location}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions Area */}
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Admission Management</p>
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <select className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-black text-slate-700 appearance-none shadow-sm focus:ring-2 focus:ring-[#0d47a1]/20 outline-none">
+                          <option value="">Update Admission Status</option>
+                          <option value="Admitted">Admitted</option>
+                          <option value="Under Observation">Under Observation</option>
+                          <option value="Discharged">Discharged</option>
+                          <option value="Transferred">Transferred</option>
+                        </select>
+                        <ChevronRight className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none rotate-90" size={16} />
+                      </div>
+                      <button className="w-full bg-white border border-slate-200 py-4 rounded-2xl text-[10px] font-black text-[#1e2b58] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm">
+                        <FileText size={16} /> View Intake Record
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-8 mt-auto shrink-0 bg-white border-t border-slate-100 flex gap-4">
+                  <button className="flex-1 bg-[#1e2b58] text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-900/10 hover:bg-blue-800 transition-all active:scale-95">
+                    Save Updates
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* --- DETAILED INTAKE REGISTRATION MODAL --- */}
       {isIntakeModalOpen && (
